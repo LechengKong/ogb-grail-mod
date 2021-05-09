@@ -66,6 +66,53 @@ def sample_neg(adj_list, edges, num_neg_samples_per_link=1, max_size=1000000, co
     return pos_edges, neg_edges
 
 
+def sample_neg_wiki(adj_list, edges, num_neg_samples_per_link=1, max_size=1000000, constrained_neg_prob=0):
+    pos_edges = edges
+    neg_edges = []
+
+    # if max_size is set, randomly sample train links
+    if max_size < len(pos_edges):
+        perm = np.random.permutation(len(pos_edges))[:max_size]
+        pos_edges = pos_edges[perm]
+
+    # sample negative links for train/test
+    n, r = adj_list[0].shape[0], len(adj_list)
+
+    # distribution of edges across reelations
+    theta = 0.001
+    edge_count = get_edge_count(adj_list)
+    rel_dist = np.zeros(edge_count.shape)
+    idx = np.nonzero(edge_count)
+    rel_dist[idx] = softmax(theta * edge_count[idx])
+
+    # possible head and tails for each relation
+    valid_heads = [adj.tocoo().row.tolist() for adj in adj_list]
+    valid_tails = [adj.tocoo().col.tolist() for adj in adj_list]
+
+    pbar = tqdm(total=len(pos_edges))
+    while len(neg_edges) < num_neg_samples_per_link * len(pos_edges):
+        neg_head, rel, neg_tail = pos_edges[pbar.n % len(pos_edges)][0], pos_edges[pbar.n % len(pos_edges)][1], pos_edges[pbar.n % len(pos_edges)][2]
+        if np.random.uniform() < constrained_neg_prob:
+            if np.random.uniform() < 0.5:
+                neg_head = np.random.choice(valid_heads[rel])
+            else:
+                neg_tail = np.random.choice(valid_tails[rel])
+        else:
+            if np.random.uniform() < 0.5:
+                neg_head = np.random.choice(n)
+            else:
+                neg_tail = np.random.choice(n)
+
+        if neg_head != neg_tail and adj_list[rel][neg_head, neg_tail] == 0:
+            neg_edges.append([neg_head, neg_tail, rel])
+            pbar.update(1)
+
+    pbar.close()
+
+    neg_edges = np.array(neg_edges)
+    return pos_edges, neg_edges
+
+
 def links2subgraphs(A, graphs, params, max_label_value=None):
     '''
     extract enclosing subgraphs, write map mode + named dbs

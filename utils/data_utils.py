@@ -1,7 +1,7 @@
 import os
 import pdb
 import numpy as np
-from scipy.sparse import csc_matrix
+from scipy.sparse import csc_matrix, save_npz
 import matplotlib.pyplot as plt
 
 
@@ -58,9 +58,34 @@ def process_files(files, saved_relation2id=None):
     adj_list = []
     for i in range(len(relation2id)):
         idx = np.argwhere(triplets['train'][:, 2] == i)
-        adj_list.append(csc_matrix((np.ones(len(idx), dtype=np.uint8), (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))), shape=(len(entity2id), len(entity2id))))
+        adj_list.append(csc_matrix((np.ones(len(idx), dtype=np.uint8),
+                                    (triplets['train'][:, 0][idx].squeeze(1), triplets['train'][:, 1][idx].squeeze(1))),
+                                   shape=(len(entity2id), len(entity2id))))
 
     return adj_list, triplets, entity2id, relation2id, id2entity, id2relation
+
+
+def process_files_wiki(data, output_path, saved_relation2id=None):
+    '''
+    files: Dictionary map of file paths to read the triplets from.
+    saved_relation2id: Saved relation2id (mostly passed from a trained model) which can be used to map relations to pre-defined indices and filter out the unknown ones.
+    '''
+
+    # Construct the list of adjacency matrix each corresponding to eeach relation. Note that this is constructed only from the train data.
+    adj_list = []
+    train = data.train_hrt
+    path = os.path.join(output_path, 'adj_mat')
+    if not os.path.exists(path):
+        os.mkdir(path)
+    for i in range(data.num_relations):
+        if i % 10 == 0:
+            print(i/10)
+        rel = train[train[:, 1] == i]
+        mat = csc_matrix((np.ones(rel.shape[0], dtype=np.uint8), (rel[:, 0], rel[:, 2])),
+                         shape=(data.num_entities, data.num_entities))
+        save_npz(os.path.join(path, 'adj_rel_'+str(i)), mat)
+
+    return adj_list
 
 
 def save_to_file(directory, file_name, triplets, id2entity, id2relation):

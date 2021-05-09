@@ -4,7 +4,7 @@ import logging
 import torch
 from scipy.sparse import SparseEfficiencyWarning
 
-from subgraph_extraction.datasets import SubgraphDataset, generate_subgraph_datasets
+from subgraph_extraction.datasets import SubgraphDataset, generate_subgraph_datasets, generate_subgraph_wiki
 from utils.initialization_utils import initialize_experiment, initialize_model
 from utils.graph_utils import collate_dgl, move_batch_to_device_dgl
 
@@ -23,7 +23,8 @@ def main(params):
     params.db_path = os.path.join(params.main_dir, f'data/{params.dataset}/subgraphs_en_{params.enclosing_sub_graph}_neg_{params.num_neg_samples_per_link}_hop_{params.hop}')
 
     if not os.path.isdir(params.db_path):
-        generate_subgraph_datasets(params)
+        # generate_subgraph_datasets(params)
+        generate_subgraph_wiki(params)
 
     train = SubgraphDataset(params.db_path, 'train_pos', 'train_neg', params.file_paths,
                             add_traspose_rels=params.add_traspose_rels,

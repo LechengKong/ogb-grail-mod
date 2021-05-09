@@ -41,6 +41,9 @@ def generate_subgraph_datasets(params, splits=['train', 'valid'], saved_relation
 
     links2subgraphs(adj_list, graphs, params, max_label_value)
 
+def generate_subgraph_wiki(params, data, saved_relation2id= None, max_label_value=None):
+    adj_list, triplets = process_files_wiki(data, saved_relation2id)
+
 
 def get_kge_embeddings(dataset, kge_model):
 

@@ -5,6 +5,7 @@ import torch
 import networkx as nx
 import dgl
 import pickle
+from scipy.sparse import coo_matrix
 
 
 def serialize(data):
@@ -43,9 +44,23 @@ def incidence_matrix(adj_list):
     return ssp.csc_matrix((data, (row, col)), shape=dim)
 
 
+def incidence_matrix_coo(adj_list):
+    rows, cols, dats = [], [], []
+    dim = adj_list[0].shape
+    for adj in adj_list:
+        rows += adj.row.tolist()
+        cols += adj.col.tolist()
+        dats += adj.data.tolist()
+    row = np.array(rows)
+    col = np.array(cols)
+    data = np.array(dats)
+    return ssp.csc_matrix((data, (row, col)), shape=dim)
+    # return ssp.csc_matrix(([1],([2],[3])),shape=dim)
+
+
 def remove_nodes(A_incidence, nodes):
     idxs_wo_nodes = list(set(range(A_incidence.shape[1])) - set(nodes))
-    return A_incidence[idxs_wo_nodes, :][:, idxs_wo_nodes]
+    return A_incidence[:, idxs_wo_nodes][idxs_wo_nodes, :]
 
 
 def ssp_to_torch(A, device, dense=False):
@@ -80,6 +95,50 @@ def ssp_multigraph_to_dgl(graph, n_feats=None):
     if n_feats is not None:
         g_dgl.ndata['feat'] = torch.tensor(n_feats)
 
+    return g_dgl
+
+
+def ssp_multigraph_to_dgl_wiki(graph, n_feats=None):
+    """
+    Converting ssp multigraph (i.e. list of adjs) to dgl multigraph.
+    """
+
+    g_nx = nx.MultiDiGraph()
+    g_nx.add_nodes_from(list(range(graph[0].shape[0])))
+    # Add edges
+    for rel, adj in enumerate(graph):
+        # Convert adjacency matrix to tuples for nx0
+        nx_triplets = []
+        for src, dst in list(zip(adj.row, adj.col)):
+            nx_triplets.append((src, dst, {'type': rel}))
+        g_nx.add_edges_from(nx_triplets)
+
+    # make dgl graph
+    g_dgl = dgl.DGLGraph(multigraph=True)
+    g_dgl.from_networkx(g_nx, edge_attrs=['type'])
+    # add node features
+    if n_feats is not None:
+        g_dgl.ndata['feat'] = torch.tensor(n_feats)
+
+    return g_dgl
+
+
+def construct_graph_from_edges(edges, n_entities):
+    coo = coo_matrix(np.ones(len(edges[0])), (edges[0], edges[2]), shape=[n_entities, n_entities])
+    g = dgl.DGLGraph(coo, readonly=True, multigraph=True, sort_csr=True)
+    g.edata['type'] = torch.tensor(edges[1], torch.int8)
+    return g
+
+
+
+def ssp_to_subgraph(subgraph_edges, nodes):
+    g_nx = nx.MultiDiGraph()
+    g_nx.add_nodes_from(nodes)
+
+    edges = [(subgraph_edges[i, 0], subgraph_edges[i, 2], {'type': subgraph_edges[i, 1]}) for i in range(len(subgraph_edges))]
+    g_nx.add_edges_from(edges)
+    g_dgl = dgl.DGLGraph(multigraph=True)
+    g_dgl.from_networkx(g_nx, edge_attrs=['type'])
     return g_dgl
 
 

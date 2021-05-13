@@ -20,12 +20,11 @@ def _bfs_relational(adj, roots, max_nodes_per_hop=None):
         for v in current_lvl:
             visited.add(v)
 
-        next_lvl = _get_neighbors(adj, current_lvl)
+        next_lvl = _get_neighbors_nos(adj, current_lvl)
         next_lvl -= visited  # set difference
 
         if max_nodes_per_hop and max_nodes_per_hop < len(next_lvl):
             next_lvl = set(random.sample(next_lvl, max_nodes_per_hop))
-
         yield next_lvl
 
         current_lvl = set.union(next_lvl)
@@ -46,4 +45,9 @@ def _sp_row_vec_from_idx_list(idx_list, dim):
     data = np.ones(len(idx_list))
     row_ind = np.zeros(len(idx_list))
     col_ind = list(idx_list)
-    return ssp.csr_matrix((data, (row_ind, col_ind)), shape=shape)
+    return ssp.csc_matrix((data, (row_ind, col_ind)), shape=shape)
+
+
+def _get_neighbors_nos(adj, current_lvl):
+    return set(adj[:, list(current_lvl)].nonzero()[0])
+

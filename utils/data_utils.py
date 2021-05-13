@@ -1,7 +1,8 @@
 import os
 import pdb
 import numpy as np
-from scipy.sparse import csc_matrix, save_npz
+import pickle
+from scipy.sparse import csc_matrix, save_npz, coo_matrix
 import matplotlib.pyplot as plt
 
 
@@ -81,10 +82,9 @@ def process_files_wiki(data, output_path, saved_relation2id=None):
         if i % 10 == 0:
             print(i/10)
         rel = train[train[:, 1] == i]
-        mat = csc_matrix((np.ones(rel.shape[0], dtype=np.uint8), (rel[:, 0], rel[:, 2])),
+        mat = coo_matrix((np.ones(rel.shape[0], dtype=np.uint8), (rel[:, 0], rel[:, 2])),
                          shape=(data.num_entities, data.num_entities))
-        save_npz(os.path.join(path, 'adj_rel_'+str(i)), mat)
-
+        save_npz(os.path.join(path, "adj_rel_"+str(i)), matrix=mat)
     return adj_list
 
 

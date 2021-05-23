@@ -124,9 +124,8 @@ def ssp_multigraph_to_dgl_wiki(graph, n_feats=None):
 
 
 def construct_graph_from_edges(edges, n_entities):
-    coo = coo_matrix(np.ones(len(edges[0])), (edges[0], edges[2]), shape=[n_entities, n_entities])
-    g = dgl.DGLGraph(coo, readonly=True, multigraph=True, sort_csr=True)
-    g.edata['type'] = torch.tensor(edges[1], torch.int8)
+    g = dgl.graph((edges[0], edges[2]), num_nodes=n_entities)
+    g.edata['type'] = torch.tensor(edges[1], dtype=torch.int32)
     return g
 
 
@@ -155,6 +154,15 @@ def collate_dgl(samples):
     return (batched_graph_pos, r_labels_pos), g_labels_pos, (batched_graph_neg, r_labels_neg), g_labels_neg
 
 
+def collate_dgl_val(samples):
+    graphs, rel, t_label = map(list, zip(*samples))
+    graphs = [item for sublist in graphs for item in sublist]
+    rels = [item for sublist in rel for item in sublist]
+    batched_graph_pos = dgl.batch(graphs)
+    return (batched_graph_pos, rels), t_label
+
+
+
 def move_batch_to_device_dgl(batch, device):
     ((g_dgl_pos, r_labels_pos), targets_pos, (g_dgl_neg, r_labels_neg), targets_neg) = batch
 
@@ -164,10 +172,21 @@ def move_batch_to_device_dgl(batch, device):
     targets_neg = torch.LongTensor(targets_neg).to(device=device)
     r_labels_neg = torch.LongTensor(r_labels_neg).to(device=device)
 
-    g_dgl_pos = send_graph_to_device(g_dgl_pos, device)
-    g_dgl_neg = send_graph_to_device(g_dgl_neg, device)
+    g_dgl_pos = g_dgl_pos.to(device)
+    g_dgl_neg = g_dgl_neg.to(device)
 
     return ((g_dgl_pos, r_labels_pos), targets_pos, (g_dgl_neg, r_labels_neg), targets_neg)
+
+
+def move_batch_to_device_dgl_val(batch, device):
+    (g_dgl_pos, r_labels_pos), targets_pos = batch
+
+    targets_pos = torch.LongTensor(targets_pos).to(device=device)
+    r_labels_pos = torch.LongTensor(r_labels_pos).to(device=device)
+
+    g_dgl_pos = g_dgl_pos.to(device)
+
+    return (g_dgl_pos, r_labels_pos), targets_pos
 
 
 def send_graph_to_device(g, device):

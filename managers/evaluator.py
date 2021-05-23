@@ -5,6 +5,8 @@ import pdb
 from sklearn import metrics
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+from sklearn import metrics
 
 
 class Evaluator():
@@ -18,27 +20,33 @@ class Evaluator():
         pos_labels = []
         neg_scores = []
         neg_labels = []
-        dataloader = DataLoader(self.data, batch_size=self.params.batch_size, shuffle=False, num_workers=self.params.num_workers, collate_fn=self.params.collate_fn)
+        mrr_scores = []
+        dataloader = DataLoader(self.data, batch_size=self.params.val_batch_size, shuffle=False, num_workers=self.params.num_workers, collate_fn=self.params.collate_fn_val)
 
         self.graph_classifier.eval()
         with torch.no_grad():
-            for b_idx, batch in enumerate(dataloader):
+            pbar = tqdm(dataloader)
+            for batch in pbar:
 
-                data_pos, targets_pos, data_neg, targets_neg = self.params.move_batch_to_device(batch, self.params.device)
+                data_pos, targets_pos = self.params.move_batch_to_device_val(batch, self.params.device)
                 # print([self.data.id2relation[r.item()] for r in data_pos[1]])
                 # pdb.set_trace()
                 score_pos = self.graph_classifier(data_pos)
-                score_neg = self.graph_classifier(data_neg)
+                scores = score_pos.view(len(targets_pos), -1)
+                scores = scores.cpu().detach().numpy()
 
-                # preds += torch.argmax(logits.detach().cpu(), dim=1).tolist()
-                pos_scores += score_pos.squeeze(1).detach().cpu().tolist()
-                neg_scores += score_neg.squeeze(1).detach().cpu().tolist()
-                pos_labels += targets_pos.tolist()
-                neg_labels += targets_neg.tolist()
+                tp = targets_pos.cpu().detach().numpy()
+
+                true_labels = np.zeros((len(tp), self.params.candidate_size))
+                true_labels[np.arange(len(targets_pos)), tp] = 1
+
+                mrr_scores.append(metrics.label_ranking_average_precision_score(true_labels, scores))
 
         # acc = metrics.accuracy_score(labels, preds)
-        auc = metrics.roc_auc_score(pos_labels + neg_labels, pos_scores + neg_scores)
-        auc_pr = metrics.average_precision_score(pos_labels + neg_labels, pos_scores + neg_scores)
+        mrr = 0
+        for v in mrr_scores:
+            mrr += v
+        mrr /= len(mrr_scores)
 
         if save:
             pos_test_triplets_path = os.path.join(self.params.main_dir, 'data/{}/{}.txt'.format(self.params.dataset, self.data.file_name))
@@ -57,4 +65,4 @@ class Evaluator():
                 for ([s, r, o], score) in zip(neg_triplets, neg_scores):
                     f.write('\t'.join([s, r, o, str(score)]) + '\n')
 
-        return {'auc': auc, 'auc_pr': auc_pr}
+        return {'mrr': mrr}

@@ -642,3 +642,94 @@ class SubgraphDatasetWikiLocalEval(Dataset):
 
         self.n_feat_dim = n_feats.shape[1]  # Find cleaner way to do this -- i.e. set the n_feat_dim
         return subgraph
+
+
+class SubgraphDatasetWikiOnline(Dataset):
+    """Extracted, labeled, subgraph dataset -- DGL Only"""
+
+    def __init__(self, data, params, adj_path, sample_size=1000, neg_link_per_sample=1, use_feature=False,
+                 shuffle=True):
+        self.wiki_data = data
+        self.num_rels = data.num_relations
+        self.edges = data.train_hrt
+        self.num_edges = len(self.edges)
+        self.num_nodes = data.num_entities
+        self.use_feature = use_feature
+        self.params = params
+        self.graph = construct_graph_from_edges(self.edges.T, self.num_nodes)
+        self.ssp_graph = [load_npz(os.path.join(adj_path, "adj_rel_" + str(i) + ".npz")) for i in
+                          range(self.wiki_data.num_relations)]
+        self.adj_mat = incidence_matrix_coo(self.ssp_graph)
+        self.adj_mat += self.adj_mat.T
+        self.max_n_label = [10, 10]
+        self.neg_sample = neg_link_per_sample
+
+        self.sample_size = sample_size
+
+        if shuffle:
+            self.perm = np.random.permutation(self.num_edges)
+
+        # the effective number of relations after adding symmetric adjacency matrices and/or self connections
+        self.aug_num_rels = data.num_relations
+        self.__getitem__(0)
+
+    def __len__(self):
+        return self.sample_size
+
+    def __getitem__(self, index):
+        pos_link = self.edges[self.perm[index]]
+        neg_links = []
+        for i in range(self.neg_sample):
+            neg_links.append(sample_neg_one(self.ssp_graph, pos_link, self.num_nodes))
+        nodes = [link[0] for link in neg_links] + [link[2] for link in neg_links] + [pos_link[0], pos_link[2]]
+        pos_nodes, pos_label, _, _, _ = subgraph_extraction_labeling_wiki([pos_link[0], pos_link[2]], pos_link[1],
+                                                                          self.adj_mat, max_nodes_per_hop=100)
+        pos_subgraph = self.graph.subgraph(pos_nodes)
+        pos_subgraph.edata['type'] = self.graph.edata['type'][pos_subgraph.edata[dgl.EID]]
+        pos_subgraph.edata['label'] = torch.tensor(pos_link[1] * np.ones(pos_subgraph.edata['type'].shape),
+                                                   dtype=torch.long)
+        # map the id read by GraIL to the entity IDs as registered by the KGE embeddings
+        pos_subgraph = self._prepare_features_new(pos_subgraph, pos_label,
+                                                  self.wiki_data.entity_feat[pos_nodes] if self.use_feature else None)
+        neg_subgraphs = []
+        for i in range(self.neg_sample):
+            neg_nodes, neg_label, _, _, _ = subgraph_extraction_labeling_wiki([neg_links[i][0], neg_links[i][2]],
+                                                                              neg_links[i][1],
+                                                                              self.adj_mat, max_nodes_per_hop=100)
+
+            neg_subgraph = self.graph.subgraph(neg_nodes)
+            neg_subgraph.edata['label'] = torch.tensor(neg_links[i][1] * np.ones(neg_subgraph.edata['type'].shape),
+                                                       dtype=torch.long)
+            neg_subgraph.add_edges([0], [1])
+            neg_subgraph.edata['type'][-1] = torch.tensor(neg_links[i][1], dtype=torch.int32)
+            neg_subgraph.edata['label'][-1] = torch.tensor(neg_links[i][1], dtype=torch.int32)
+            neg_subgraphs.append(self._prepare_features_new(neg_subgraph, neg_label,
+                                                            self.wiki_data.entity_feat[
+                                                                neg_nodes] if self.use_feature else None))
+        if index == self.sample_size:
+            self.perm = np.random.permutation(self.num_edges)
+        return pos_subgraph, 1, pos_link[1], neg_subgraphs, [0] * len(neg_subgraphs), [neg_links[i][1] for i in
+                                                                                       range(len(neg_subgraphs))]
+
+    def _prepare_features_new(self, subgraph, n_labels, n_feats=None):
+        # One hot encode the node label feature and concat to n_featsure
+        n_nodes = subgraph.number_of_nodes()
+        label_feats = np.zeros((n_nodes, self.max_n_label[0] + 1 + self.max_n_label[1] + 1))
+        label_feats[np.arange(n_nodes), n_labels[:, 0]] = 1
+        label_feats[np.arange(n_nodes), self.max_n_label[0] + 1 + n_labels[:, 1]] = 1
+        # label_feats = np.zeros((n_nodes, self.max_n_label[0] + 1 + self.max_n_label[1] + 1))
+        # label_feats[np.arange(n_nodes), 0] = 1
+        # label_feats[np.arange(n_nodes), self.max_n_label[0] + 1] = 1
+        n_feats = np.concatenate((label_feats, n_feats), axis=1) if n_feats is not None else label_feats
+        subgraph.ndata['feat'] = torch.FloatTensor(n_feats)
+
+        head_id = np.argwhere([label[0] == 0 and label[1] == 1 for label in n_labels])
+        tail_id = np.argwhere([label[0] == 1 and label[1] == 0 for label in n_labels])
+        n_ids = np.zeros(n_nodes)
+        n_ids[head_id] = 1  # head
+        n_ids[tail_id] = 2  # tail
+        subgraph.ndata['id'] = torch.FloatTensor(n_ids)
+
+        self.n_feat_dim = n_feats.shape[1]  # Find cleaner way to do this -- i.e. set the n_feat_dim
+        return subgraph
+

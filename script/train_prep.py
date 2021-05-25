@@ -1,5 +1,5 @@
 import os
-from subgraph_extraction.datasets import SubgraphDatasetWikiDynamic, SubgraphDatasetWikiLocal, SubgraphDatasetWikiEval, SubgraphDatasetWikiLocalEval, SubgraphDatasetWikiLocalTest
+from subgraph_extraction.datasets import SubgraphDatasetWikiDynamic, SubgraphDatasetWikiLocal, SubgraphDatasetWikiEval, SubgraphDatasetWikiLocalEval, SubgraphDatasetWikiLocalTest, SubgraphDatasetWikiOnline
 from ogb.lsc import WikiKG90MDataset as wikiData
 import torch
 import numpy as np
@@ -20,7 +20,7 @@ class Mem:
         self.hop = 1
         self.enclosing_sub_graph = False
         self.max_nodes_per_hop = 100
-        self.num_neg_samples_per_link = 2
+        self.num_neg_samples_per_link = 100
         self.root_path = "/project/tantra/jerry.kong/ogb_project/dataset/wikikg90m_kddcup2021"
         self.adj_path = "/project/tantra/jerry.kong/ogb_project/dataset/wikikg90m_kddcup2021/adj_mat"
         self.num_rels = 1315
@@ -47,7 +47,7 @@ class Mem:
         self.save_every = 1
         self.exp_dir = "/project/tantra/jerry.kong/ogb_project/dataset/wikikg90m_kddcup2021/"
         self.margin = 10
-        self.train_edges = 180000
+        self.train_edges = 10000
         self.val_size = 1000
         self.eval_every_iter = 3
         self.early_stop = 3
@@ -179,7 +179,8 @@ if __name__ == '__main__':
     train_end = int(params.train_edges*train_size)
     train_ind = np.arange(train_end)
     test_ind = np.arange(train_end, params.train_edges)
-    train = SubgraphDatasetWikiLocal(dataset, params, params.db_path, 'train', sample_size=len(train_ind), db_index=train_ind, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
+    # train = SubgraphDatasetWikiLocal(dataset, params, params.db_path, 'train', sample_size=len(train_ind), db_index=train_ind, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
+    train = SubgraphDatasetWikiOnline(dataset, params, params.adj_path, sample_size=params.train_edges, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     test = SubgraphDatasetWikiLocalEval(dataset, params, params.db_path_val, 'val', sample_size=params.val_size, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     # test = SubgraphDatasetWikiLocalTest(dataset, params, params.db_path, 'train', sample_size=len(train_ind), db_index=train_ind, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     params.inp_dim = train.n_feat_dim

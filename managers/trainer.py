@@ -93,7 +93,7 @@ class Trainer():
 
         weight_norm = sum(map(lambda x: torch.norm(x), model_params))
 
-        return total_loss, auc, auc_pr, weight_norm
+        return total_loss/self.params.train_edges, auc, auc_pr, weight_norm
 
     def train(self):
         self.reset_training_state()

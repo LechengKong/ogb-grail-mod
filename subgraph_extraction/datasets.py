@@ -665,13 +665,14 @@ class SubgraphDatasetWikiOnline(Dataset):
         self.neg_sample = neg_link_per_sample
 
         self.sample_size = sample_size
-
-        if shuffle:
-            self.perm = np.random.permutation(self.num_edges)
+        self.shuffle = shuffle
+        self.perm = np.random.permutation(self.num_edges)
+        self.shuffle_count = 0
 
         # the effective number of relations after adding symmetric adjacency matrices and/or self connections
         self.aug_num_rels = data.num_relations
-        self.__getitem__(0)
+        pos_g, pos_la, pos_rel, neg_g, neg_la, neg_rel = self.__getitem__(0)
+        self.n_feat_dim = pos_g.ndata['feat'].shape[1]
 
     def __len__(self):
         return self.sample_size
@@ -679,25 +680,34 @@ class SubgraphDatasetWikiOnline(Dataset):
     def __getitem__(self, index):
         pos_link = self.edges[self.perm[index]]
         neg_links = []
+        st = time.time()
         for i in range(self.neg_sample):
             neg_links.append(sample_neg_one(self.ssp_graph, pos_link, self.num_nodes))
         nodes = [link[0] for link in neg_links] + [link[2] for link in neg_links] + [pos_link[0], pos_link[2]]
-        pos_nodes, pos_label, _, _, _ = subgraph_extraction_labeling_wiki([pos_link[0], pos_link[2]], pos_link[1],
-                                                                          self.adj_mat, max_nodes_per_hop=100)
-        pos_subgraph = self.graph.subgraph(pos_nodes)
-        pos_subgraph.edata['type'] = self.graph.edata['type'][pos_subgraph.edata[dgl.EID]]
+        node_set = set(nodes)
+        sample_nodes = get_neighbor_nodes(node_set, self.adj_mat, max_nodes_per_hop=self.neg_sample*5)
+        sample_nodes = list(node_set) + list(sample_nodes)
+        main_subgraph = self.graph.subgraph(sample_nodes)
+        main_subgraph.edata['type'] = self.graph.edata['type'][main_subgraph.edata[dgl.EID]]
+        
+        p_id = main_subgraph.ndata[dgl.NID].numpy()
+        local_adj_mat = main_subgraph.adjacency_matrix() + main_subgraph.adjacency_matrix(True)
+        local_adj_mat = local_adj_mat.to_dense().numpy()
+        node_to_id = {pid: i for i, pid in enumerate(p_id)}
+
+        pos_nodes, pos_label, _, _, _ = subgraph_extraction_labeling_wiki([node_to_id[pos_link[0]], node_to_id[pos_link[2]]], pos_link[1], local_adj_mat, max_nodes_per_hop=self.neg_sample*5)
+        pos_subgraph = main_subgraph.subgraph(pos_nodes)
+        pos_subgraph.edata['type'] = main_subgraph.edata['type'][pos_subgraph.edata[dgl.EID]]
         pos_subgraph.edata['label'] = torch.tensor(pos_link[1] * np.ones(pos_subgraph.edata['type'].shape),
                                                    dtype=torch.long)
         # map the id read by GraIL to the entity IDs as registered by the KGE embeddings
         pos_subgraph = self._prepare_features_new(pos_subgraph, pos_label,
-                                                  self.wiki_data.entity_feat[pos_nodes] if self.use_feature else None)
+                                                  self.wiki_data.entity_feat[p_id[pos_nodes]] if self.use_feature else None)
         neg_subgraphs = []
         for i in range(self.neg_sample):
-            neg_nodes, neg_label, _, _, _ = subgraph_extraction_labeling_wiki([neg_links[i][0], neg_links[i][2]],
-                                                                              neg_links[i][1],
-                                                                              self.adj_mat, max_nodes_per_hop=100)
+            neg_nodes, neg_label, _, _, _ = subgraph_extraction_labeling_wiki([node_to_id[neg_links[i][0]], node_to_id[neg_links[i][2]]], neg_links[i][1], local_adj_mat, max_nodes_per_hop=self.neg_sample*5)
 
-            neg_subgraph = self.graph.subgraph(neg_nodes)
+            neg_subgraph = main_subgraph.subgraph(neg_nodes)
             neg_subgraph.edata['label'] = torch.tensor(neg_links[i][1] * np.ones(neg_subgraph.edata['type'].shape),
                                                        dtype=torch.long)
             neg_subgraph.add_edges([0], [1])
@@ -705,9 +715,13 @@ class SubgraphDatasetWikiOnline(Dataset):
             neg_subgraph.edata['label'][-1] = torch.tensor(neg_links[i][1], dtype=torch.int32)
             neg_subgraphs.append(self._prepare_features_new(neg_subgraph, neg_label,
                                                             self.wiki_data.entity_feat[
-                                                                neg_nodes] if self.use_feature else None))
-        if index == self.sample_size:
+                                                                p_id[neg_nodes]] if self.use_feature else None))
+        if self.shuffle_count >= self.sample_size and self.shuffle:
+            j = self.perm[0]
             self.perm = np.random.permutation(self.num_edges)
+            if self.perm[0] == j:
+                print("wrong perm")
+            self.shuffle_count = 0
         return pos_subgraph, 1, pos_link[1], neg_subgraphs, [0] * len(neg_subgraphs), [neg_links[i][1] for i in
                                                                                        range(len(neg_subgraphs))]
 

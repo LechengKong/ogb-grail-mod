@@ -1,5 +1,5 @@
 import os
-from subgraph_extraction.datasets import SubgraphDatasetWikiDynamic, SubgraphDatasetWikiLocal, SubgraphDatasetWikiEval, SubgraphDatasetWikiLocalEval
+from subgraph_extraction.datasets import SubgraphDatasetWikiDynamic, SubgraphDatasetWikiLocal, SubgraphDatasetWikiEval, SubgraphDatasetWikiLocalEval, SubgraphDatasetWikiLocalTest
 from ogb.lsc import WikiKG90MDataset as wikiData
 import torch
 import numpy as np
@@ -8,6 +8,7 @@ from model.dgl.graph_classifier import GraphClassifier as dgl_model
 from managers.trainer import Trainer
 from managers.evaluator import Evaluator
 import lmdb
+import random
 from tqdm import tqdm
 import multiprocessing as mp
 import pickle
@@ -38,22 +39,23 @@ class Mem:
         self.has_attn = True
         self.gnn_agg_type = 'sum'
         self.optimizer = 'Adam'
-        self.lr = 0.01
+        self.lr = 0.001
         self.l2 = 5e-4
         self.batch_size = 32
-        self.num_workers = 16
-        self.num_epochs = 10
+        self.num_workers = 32
+        self.num_epochs = 20
         self.save_every = 1
         self.exp_dir = "/project/tantra/jerry.kong/ogb_project/dataset/wikikg90m_kddcup2021/"
         self.margin = 10
-        self.train_edges = 10000
+        self.train_edges = 180000
         self.val_size = 1000
-        self.eval_every_iter = 1
+        self.eval_every_iter = 3
         self.early_stop = 3
         self.split = 'val'
         self.make_data = False
-        self.val_batch_size = 2
+        self.val_batch_size = 1
         self.candidate_size = 1001
+        self.prefetch_val = 1
 
 
 def initializer(train_d):
@@ -82,6 +84,10 @@ def prepare_g(idx):
 
 
 if __name__ == '__main__':
+    torch.manual_seed(10)
+    random.seed(10)
+    np.random.seed(10)
+
     params = Mem()
 
     params.db_path = os.path.join(params.root_path,
@@ -92,7 +98,7 @@ if __name__ == '__main__':
     params.num_rels = dataset.num_relations
 
     if torch.cuda.is_available():
-        params.device = torch.device('cuda:0')
+        params.device = torch.device('cuda:3')
     else:
         params.device = torch.device('cpu')
 
@@ -168,13 +174,14 @@ if __name__ == '__main__':
 
             extraction_helper([train], split_env)
         print("subgraph processed")
-
-    train_size = 0.1
+    torch.multiprocessing.set_sharing_strategy('file_system')
+    train_size = 1
     train_end = int(params.train_edges*train_size)
     train_ind = np.arange(train_end)
     test_ind = np.arange(train_end, params.train_edges)
     train = SubgraphDatasetWikiLocal(dataset, params, params.db_path, 'train', sample_size=len(train_ind), db_index=train_ind, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     test = SubgraphDatasetWikiLocalEval(dataset, params, params.db_path_val, 'val', sample_size=params.val_size, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
+    # test = SubgraphDatasetWikiLocalTest(dataset, params, params.db_path, 'train', sample_size=len(train_ind), db_index=train_ind, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     params.inp_dim = train.n_feat_dim
 
     graph_classifier = dgl_model(params, rel_to_id).to(device=params.device)

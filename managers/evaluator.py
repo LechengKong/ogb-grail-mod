@@ -21,7 +21,7 @@ class Evaluator():
         neg_scores = []
         neg_labels = []
         mrr_scores = []
-        dataloader = DataLoader(self.data, batch_size=self.params.val_batch_size, shuffle=False, num_workers=self.params.num_workers, collate_fn=self.params.collate_fn_val)
+        dataloader = DataLoader(self.data, batch_size=self.params.val_batch_size, shuffle=False, num_workers=self.params.num_workers, collate_fn=self.params.collate_fn_val, prefetch_factor=self.params.prefetch_val)
 
         self.graph_classifier.eval()
         with torch.no_grad():
@@ -37,7 +37,7 @@ class Evaluator():
 
                 tp = targets_pos.cpu().detach().numpy()
 
-                true_labels = np.zeros((len(tp), self.params.candidate_size))
+                true_labels = np.zeros(scores.shape)
                 true_labels[np.arange(len(targets_pos)), tp] = 1
 
                 mrr_scores.append(metrics.label_ranking_average_precision_score(true_labels, scores))

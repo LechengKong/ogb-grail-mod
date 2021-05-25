@@ -63,12 +63,13 @@ class Trainer():
             # print(score_pos, score_neg, loss)
             loss.backward()
             self.optimizer.step()
-            self.updates_counter += 1
 
             with torch.no_grad():
                 all_scores += score_pos.squeeze().detach().cpu().tolist() + score_neg.squeeze().detach().cpu().tolist()
                 all_labels += targets_pos.tolist() + targets_neg.tolist()
                 total_loss += loss
+                
+        self.updates_counter += 1
 
         if self.valid_evaluator and self.params.eval_every_iter and self.updates_counter % self.params.eval_every_iter == 0:
             tic = time.time()

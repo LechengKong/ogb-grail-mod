@@ -9,6 +9,7 @@ import numpy as np
 import json
 import pickle
 import dgl
+import multiprocessing
 from utils.graph_utils import ssp_multigraph_to_dgl, ssp_multigraph_to_dgl_wiki, construct_graph_from_edges
 from utils.data_utils import process_files, save_to_file, plot_rel_dist
 from subgraph_extraction.graph_sampler import subgraph_extraction_labeling_wiki, get_neighbor_nodes
@@ -477,6 +478,54 @@ class SubgraphDatasetWikiLocal(Dataset):
         return subgraph
 
 
+class SubgraphDatasetWikiLocalTest(Dataset):
+    """Extracted, labeled, subgraph dataset -- DGL Only"""
+
+    def __init__(self, data, params, db_path, sub_db_name, sample_size=1000, db_index=None, neg_link_per_sample=1,
+                 use_feature=False):
+        self.wiki_data = data
+        self.use_feature = use_feature
+        self.params = params
+        self.max_n_label = [10, 10]
+        self.neg_sample = neg_link_per_sample
+        self.main_env = lmdb.open(db_path, readonly=True, max_dbs=3, lock=False)
+        self.sample_size = sample_size
+        self.sub_db = self.main_env.open_db(sub_db_name.encode())
+        if db_index is None:
+            self.perm = np.random.permutation(self.sample_size)
+        else:
+            self.perm = db_index
+
+        # the effective number of relations after adding symmetric adjacency matrices and/or self connections
+        self.aug_num_rels = data.num_relations
+        pos_g, pos_rel, la = self.__getitem__(0)
+        self.n_feat_dim = pos_g[0].ndata['feat'].shape[1]
+
+    def __len__(self):
+        return self.sample_size
+
+    def __getitem__(self, index):
+        with self.main_env.begin(db=self.sub_db) as txn:
+            str_id = '{:08}'.format(index).encode('ascii')
+            pos_g, pos_la, pos_rel, neg_g, neg_la, neg_rel = pickle.loads(txn.get(str_id))
+
+        if self.use_feature:
+            pos_g = self.prepare_feature(pos_g)
+            for i in range(len(neg_g)):
+                neg_g[i] = self.prepare_feature(neg_g[i])
+        neg_g.append(pos_g)
+        neg_la.append(pos_la)
+        neg_rel.append(pos_rel)
+        return neg_g, neg_rel, len(neg_g)-1
+
+    def prepare_feature(self, subgraph):
+        labels = subgraph.ndata['feat']
+        n_feats = self.wiki_data.entity_feat[subgraph.ndata[dgl.NID]]
+        n_feats = np.concatenate((labels, n_feats), axis=1)
+        subgraph.ndata['feat'] = torch.FloatTensor(n_feats)
+        return subgraph
+
+
 class SubgraphDatasetWikiEval(Dataset):
     """Extracted, labeled, subgraph dataset -- DGL Only"""
 
@@ -541,7 +590,7 @@ class SubgraphDatasetWikiLocalEval(Dataset):
         return self.sample_size
 
     def __getitem__(self, index):
-        st = time.time()
+        index = len(self)-index-1
         p_head = self.val_dict['h,r->t']['hr'][index, 0]
         rel = self.val_dict['h,r->t']['hr'][index, 1]
         with self.main_env.begin(db=self.sub_db) as txn:
@@ -570,7 +619,6 @@ class SubgraphDatasetWikiLocalEval(Dataset):
                                                       self.wiki_data.entity_feat[
                                                           p_id[pos_nodes]] if self.use_feature else None)
             graphs.append(pos_subgraph)
-        print(st-time.time())
         return graphs, [rel]*len(graphs), self.val_dict['h,r->t']['t_correct_index'][index]
 
     def _prepare_features_new(self, subgraph, n_labels, n_feats=None):

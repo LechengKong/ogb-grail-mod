@@ -679,10 +679,11 @@ class SubgraphDatasetWikiOnline(Dataset):
 
     def __getitem__(self, index):
         pos_link = self.edges[self.perm[index]]
-        neg_links = []
-        st = time.time()
-        for i in range(self.neg_sample):
-            neg_links.append(sample_neg_one(self.ssp_graph, pos_link, self.num_nodes))
+        neg_heads = np.random.choice(self.num_nodes, int(self.neg_sample/2))
+        neg_tails = np.random.choice(self.num_nodes, int(self.neg_sample/2))
+        neg_links = [[pos_link[0], pos_link[1], neg_head] for neg_head in neg_heads] + [[pos_link[0], pos_link[1], neg_tail] for neg_tail in neg_tails]
+        # for i in range(self.neg_sample):
+        #     neg_links.append(sample_neg_one(self.ssp_graph, pos_link, self.num_nodes))
         nodes = [link[0] for link in neg_links] + [link[2] for link in neg_links] + [pos_link[0], pos_link[2]]
         node_set = set(nodes)
         sample_nodes = get_neighbor_nodes(node_set, self.adj_mat, max_nodes_per_hop=self.neg_sample*5)
@@ -744,6 +745,5 @@ class SubgraphDatasetWikiOnline(Dataset):
         n_ids[tail_id] = 2  # tail
         subgraph.ndata['id'] = torch.FloatTensor(n_ids)
 
-        self.n_feat_dim = n_feats.shape[1]  # Find cleaner way to do this -- i.e. set the n_feat_dim
         return subgraph
 

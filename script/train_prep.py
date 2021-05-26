@@ -41,8 +41,8 @@ class Mem:
         self.optimizer = 'Adam'
         self.lr = 0.001
         self.l2 = 5e-4
-        self.batch_size = 32
-        self.num_workers = 32
+        self.batch_size = 16
+        self.num_workers = 8
         self.num_epochs = 20
         self.save_every = 1
         self.exp_dir = "/project/tantra/jerry.kong/ogb_project/dataset/wikikg90m_kddcup2021/"

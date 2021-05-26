@@ -67,7 +67,7 @@ class Trainer():
             with torch.no_grad():
                 all_scores += score_pos.squeeze().detach().cpu().tolist() + score_neg.squeeze().detach().cpu().tolist()
                 all_labels += targets_pos.tolist() + targets_neg.tolist()
-                total_loss += loss
+                total_loss += loss.item()
                 
         self.updates_counter += 1
 

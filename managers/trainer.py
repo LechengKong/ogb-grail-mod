@@ -65,9 +65,9 @@ class Trainer():
             self.optimizer.step()
 
             with torch.no_grad():
-                all_scores += score_pos.squeeze().detach().cpu().tolist() + score_neg.squeeze().detach().cpu().tolist()
-                all_labels += targets_pos.detach().cpu().tolist() + targets_neg.detach().cpu().tolist()
-                total_loss += loss.detach().item()
+                all_scores += score_pos.squeeze().cpu().tolist() + score_neg.squeeze().cpu().tolist()
+                all_labels += targets_pos.cpu().tolist() + targets_neg.cpu().tolist()
+                total_loss += loss.item()
                 
         self.updates_counter += 1
 
@@ -90,9 +90,8 @@ class Trainer():
 
         auc = metrics.roc_auc_score(all_labels, all_scores)
         auc_pr = metrics.average_precision_score(all_labels, all_scores)
-
+        torch.cuda.empty_cache()
         # weight_norm = sum(map(lambda x: torch.norm(x), model_params))
-
         return total_loss/self.params.train_edges, auc, auc_pr
 
     def train(self):

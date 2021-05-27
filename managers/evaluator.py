@@ -33,9 +33,9 @@ class Evaluator():
                 # pdb.set_trace()
                 score_pos = self.graph_classifier(data_pos)
                 scores = score_pos.view(len(targets_pos), -1)
-                scores = scores.cpu().detach().numpy()
+                scores = scores.cpu().numpy()
 
-                tp = targets_pos.cpu().detach().numpy()
+                tp = targets_pos.cpu().numpy()
 
                 true_labels = np.zeros(scores.shape)
                 true_labels[np.arange(len(targets_pos)), tp] = 1
@@ -64,5 +64,4 @@ class Evaluator():
             with open(neg_file_path, "w") as f:
                 for ([s, r, o], score) in zip(neg_triplets, neg_scores):
                     f.write('\t'.join([s, r, o, str(score)]) + '\n')
-
         return {'mrr': mrr}

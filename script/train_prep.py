@@ -41,7 +41,7 @@ class Mem:
         self.optimizer = 'Adam'
         self.lr = 0.001
         self.l2 = 5e-4
-        self.batch_size = 16
+        self.batch_size = 8
         self.num_workers = 16
         self.num_epochs = 20
         self.save_every = 1
@@ -56,6 +56,8 @@ class Mem:
         self.val_batch_size = 1
         self.candidate_size = 1001
         self.prefetch_val = 1
+        self.retrain = False
+        self.retrain_seed = 100
 
 
 def initializer(train_d):
@@ -84,11 +86,18 @@ def prepare_g(idx):
 
 
 if __name__ == '__main__':
-    torch.manual_seed(10)
-    random.seed(10)
-    np.random.seed(10)
-
     params = Mem()
+
+    if params.retrain:
+        print("retrain model")
+        torch.manual_seed(params.retrain_seed)
+        random.seed(params.retrain_seed)
+        np.random.seed(params.retrain_seed)
+    else:
+        torch.manual_seed(10)
+        random.seed(10)
+        np.random.seed(10)
+
 
     params.db_path = os.path.join(params.root_path,
                                   f'dbs/subgraphs_en_{params.enclosing_sub_graph}_neg_{params.num_neg_samples_per_link}_hop_{params.hop}')
@@ -184,8 +193,10 @@ if __name__ == '__main__':
     test = SubgraphDatasetWikiLocalEval(dataset, params, params.db_path_val, 'val', sample_size=params.val_size, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     # test = SubgraphDatasetWikiLocalTest(dataset, params, params.db_path, 'train', sample_size=len(train_ind), db_index=train_ind, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     params.inp_dim = train.n_feat_dim
-
-    graph_classifier = dgl_model(params, rel_to_id).to(device=params.device)
+    if params.retrain:
+        graph_classifier = torch.load(os.path.join(params.exp_dir, 'graph_classifier_chk.pth'))
+    else:
+        graph_classifier = dgl_model(params, rel_to_id).to(device=params.device)
     validator = Evaluator(params, graph_classifier, test)
     trainer = Trainer(params, graph_classifier, train, valid_evaluator=validator)
 

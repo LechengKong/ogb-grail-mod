@@ -41,7 +41,7 @@ class Mem:
         self.optimizer = 'Adam'
         self.lr = 0.001
         self.l2 = 5e-4
-        self.batch_size = 32
+        self.batch_size = 16
         self.num_workers = 16
         self.num_epochs = 20
         self.save_every = 1
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     params.num_rels = dataset.num_relations
 
     if torch.cuda.is_available():
-        params.device = torch.device('cuda:3')
+        params.device = torch.device('cuda:2')
     else:
         params.device = torch.device('cpu')
 

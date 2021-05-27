@@ -51,7 +51,7 @@ class Trainer():
 
         dataloader = DataLoader(self.train_data, batch_size=self.params.batch_size, shuffle=True, num_workers=self.params.num_workers, collate_fn=self.params.collate_fn)
         self.graph_classifier.train()
-        model_params = list(self.graph_classifier.parameters())
+        # model_params = list(self.graph_classifier.parameters())
         pbar = tqdm(dataloader)
 
         for batch in pbar:
@@ -66,8 +66,8 @@ class Trainer():
 
             with torch.no_grad():
                 all_scores += score_pos.squeeze().detach().cpu().tolist() + score_neg.squeeze().detach().cpu().tolist()
-                all_labels += targets_pos.tolist() + targets_neg.tolist()
-                total_loss += loss.item()
+                all_labels += targets_pos.detach().cpu().tolist() + targets_neg.detach().cpu().tolist()
+                total_loss += loss.detach().item()
                 
         self.updates_counter += 1
 
@@ -91,18 +91,18 @@ class Trainer():
         auc = metrics.roc_auc_score(all_labels, all_scores)
         auc_pr = metrics.average_precision_score(all_labels, all_scores)
 
-        weight_norm = sum(map(lambda x: torch.norm(x), model_params))
+        # weight_norm = sum(map(lambda x: torch.norm(x), model_params))
 
-        return total_loss/self.params.train_edges, auc, auc_pr, weight_norm
+        return total_loss/self.params.train_edges, auc, auc_pr
 
     def train(self):
         self.reset_training_state()
 
         for epoch in range(1, self.params.num_epochs + 1):
             time_start = time.time()
-            loss, auc, auc_pr, weight_norm = self.train_epoch()
+            loss, auc, auc_pr = self.train_epoch()
             time_elapsed = time.time() - time_start
-            print(f'Epoch {epoch} with loss: {loss}, training auc: {auc}, training auc_pr: {auc_pr}, best validation AUC: {self.best_metric}, weight_norm: {weight_norm} in {time_elapsed}')
+            print(f'Epoch {epoch} with loss: {loss}, training auc: {auc}, training auc_pr: {auc_pr}, best VAL mrr: {self.best_metric} in {time_elapsed}')
             if not self.should_train:
                 break
             # if self.valid_evaluator and epoch % self.params.eval_every == 0:

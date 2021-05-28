@@ -10,3 +10,5 @@ experiments/
 *.ipynb
 *.npy
 *.pyc
+nohup.out
+.nfs0000000000b9bb4e00000170

@@ -17,13 +17,11 @@ from sklearn import metrics
 
 
 class Trainer():
-    def __init__(self, params, graph_classifier, train, valid_evaluator=None):
+    def __init__(self, params, graph_classifier, train, state_dict=None, valid_evaluator=None):
         self.graph_classifier = graph_classifier
         self.valid_evaluator = valid_evaluator
         self.params = params
         self.train_data = train
-
-        self.updates_counter = 0
 
         model_params = list(self.graph_classifier.parameters())
         logging.info('Total number of parameters: %d' % sum(map(lambda x: x.numel(), model_params)))
@@ -32,6 +30,14 @@ class Trainer():
             self.optimizer = optim.SGD(model_params, lr=params.lr, momentum=params.momentum, weight_decay=self.params.l2)
         if params.optimizer == "Adam":
             self.optimizer = optim.Adam(model_params, lr=params.lr, weight_decay=self.params.l2)
+
+        self.updates_counter = 0
+        self.start_epoch = 0
+        self.epoch = 1
+        if state_dict is not None:
+            self.start_epoch = state_dict['epoch']
+            self.optimizer.load_state_dict(state_dict['optimizer'])
+            self.graph_classifier.load_state_dict(state_dict['state_dict'])
 
         self.criterion = nn.MarginRankingLoss(self.params.margin, reduction='sum')
 
@@ -97,7 +103,8 @@ class Trainer():
     def train(self):
         self.reset_training_state()
 
-        for epoch in range(1, self.params.num_epochs + 1):
+        for epoch in range(self.start_epoch+1, self.params.num_epochs + self.start_epoch + 1):
+            self.epoch = epoch
             time_start = time.time()
             loss, auc, auc_pr = self.train_epoch()
             time_elapsed = time.time() - time_start
@@ -121,8 +128,8 @@ class Trainer():
             #     self.last_metric = result['auc']
 
             if epoch % self.params.save_every == 0:
-                torch.save(self.graph_classifier, os.path.join(self.params.exp_dir, 'graph_classifier_chk.pth'))
+                torch.save({'epoch': self.epoch, 'state_dict': self.graph_classifier.state_dict(), 'optimizer': self.optimizer.state_dict()}, os.path.join(self.params.exp_dir, 'graph_classifier_chk.pth'))
 
     def save_classifier(self):
-        torch.save(self.graph_classifier, os.path.join(self.params.exp_dir, 'best_graph_classifier.pth'))  # Does it overwrite or fuck with the existing file?
+        torch.save({'epoch': self.epoch, 'state_dict': self.graph_classifier.state_dict(), 'optimizer': self.optimizer.state_dict()}, os.path.join(self.params.exp_dir, 'best_graph_classifier.pth'))  # Does it overwrite or fuck with the existing file?
         logging.info('Better models found w.r.t accuracy. Saved it!')

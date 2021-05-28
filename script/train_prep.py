@@ -47,7 +47,7 @@ class Mem:
         self.save_every = 1
         self.exp_dir = "/project/tantra/jerry.kong/ogb_project/dataset/wikikg90m_kddcup2021/"
         self.margin = 10
-        self.train_edges = 10000
+        self.train_edges = 100
         self.val_size = 1000
         self.eval_every_iter = 3
         self.early_stop = 3
@@ -56,7 +56,7 @@ class Mem:
         self.val_batch_size = 1
         self.candidate_size = 1001
         self.prefetch_val = 1
-        self.retrain = False
+        self.retrain = True
         self.retrain_seed = 100
 
 
@@ -193,11 +193,13 @@ if __name__ == '__main__':
     test = SubgraphDatasetWikiLocalEval(dataset, params, params.db_path_val, 'val', sample_size=params.val_size, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     # test = SubgraphDatasetWikiLocalTest(dataset, params, params.db_path, 'train', sample_size=len(train_ind), db_index=train_ind, neg_link_per_sample=params.num_neg_samples_per_link, use_feature=True)
     params.inp_dim = train.n_feat_dim
+    graph_classifier = dgl_model(params, rel_to_id).to(device=params.device)
+    state_d = None
     if params.retrain:
-        graph_classifier = torch.load(os.path.join(params.exp_dir, 'graph_classifier_chk.pth'))
-    else:
-        graph_classifier = dgl_model(params, rel_to_id).to(device=params.device)
+        state_d = torch.load(os.path.join(params.exp_dir, 'graph_classifier_chk.pth'))
+
+
     validator = Evaluator(params, graph_classifier, test)
-    trainer = Trainer(params, graph_classifier, train, valid_evaluator=validator)
+    trainer = Trainer(params, graph_classifier, train, state_dict=state_d, valid_evaluator=validator)
 
     trainer.train()
